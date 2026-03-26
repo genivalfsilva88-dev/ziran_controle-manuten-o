@@ -705,6 +705,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
   setInterval(pollSync, 10000);
 });
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js');
+}  
 </script>
-</body>
+  </body>
 </html>
