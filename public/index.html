@@ -646,25 +646,216 @@ function rHist(f){ f=f||''; let items=(S.historico||[]); if(f){const q=f.toLower
   </tr>`).join(''):`<tr><td colspan="20"><div class="empty-st"><p>Sem registros no histórico.</p></div></td></tr>`}</tbody></table></div></div>`; }
 
 // ── OS CRUD ───────────────────────────────────────────────────────────
-const OSF=['identificacao','placa_frota','data_abertura','nivel_critico','motivo','tipo_manutencao','estabelecimento','prev_liberacao','prev_liberacao2','localizacao','obs1','obs2','data_liberacao','sla'];
-function clearOSF(){ OSF.forEach(f=>{const e=document.getElementById('f-'+f);if(e)e.value='';}); document.getElementById('af-hint').style.display='none'; }
-function fillOSF(m){ OSF.forEach(f=>{const e=document.getElementById('f-'+f);if(e)e.value=m[f]||'';}); }
+const OSF = [
+  'identificacao','placa_frota','data_abertura','nivel_critico','motivo',
+  'tipo_manutencao','estabelecimento','prev_liberacao','prev_liberacao2',
+  'localizacao','obs1','obs2','data_liberacao','sla'
+];
 
-function openAdd(){ S.eOS=null; S.eCat=S.page; document.getElementById('mos-title').textContent='Nova Ordem de Serviço'; clearOSF(); document.getElementById('f-data_abertura').value=new Date().toISOString().split('T')[0]; document.getElementById('modal-os').classList.add('open'); setTimeout(()=>document.getElementById('f-identificacao').focus(),100); }
-function editOS(cat,id){ const m=S[cat].find(x=>x.id===id); if(!m)return; S.eOS=id; S.eCat=cat; document.getElementById('mos-title').textContent=`Editar OS #${id} — ${m.frota||m.identificacao}`; fillOSF(m); document.getElementById('modal-os').classList.add('open'); }
+function norm(v){
+  return String(v || '').trim().toUpperCase();
+}
+
+function onlyDate(v){
+  return v ? String(v).slice(0, 10) : '';
+}
+
+function clearOSF(){
+  OSF.forEach(f => {
+    const e = document.getElementById('f-' + f);
+    if (e) e.value = '';
+  });
+  const hint = document.getElementById('af-hint');
+  if (hint) {
+    hint.style.display = 'none';
+    hint.textContent = '';
+  }
+}
+
+function fillOSF(m){
+  OSF.forEach(f => {
+    const e = document.getElementById('f-' + f);
+    if (e) e.value = m[f] || '';
+  });
+  autoFill(m.identificacao || m.frota || m.placa || '');
+  updateAutoSLA();
+}
+
+function findVeiculoByIdent(valor){
+  const key = norm(valor);
+  if (!key) return null;
+
+  return (S.veiculos || []).find(v =>
+    norm(v.frota) === key ||
+    norm(v.placa) === key ||
+    norm(v.modelo) === key
+  ) || null;
+}
+
+function autoFill(valor){
+  const v = findVeiculoByIdent(valor);
+  const hint = document.getElementById('af-hint');
+  const placaFrota = document.getElementById('f-placa_frota');
+
+  if (!v) {
+    if (placaFrota && !placaFrota.dataset.manual) placaFrota.value = '';
+    if (hint) {
+      hint.style.display = 'none';
+      hint.textContent = '';
+    }
+    return;
+  }
+
+  if (placaFrota && !placaFrota.value) {
+    placaFrota.value = v.placa || v.frota || '';
+    placaFrota.classList.add('filled');
+    setTimeout(() => placaFrota.classList.remove('filled'), 1200);
+  }
+
+  if (hint) {
+    hint.style.display = 'block';
+    hint.textContent = `Cadastro localizado: ${v.placa || 'sem placa'} • ${v.modelo || 'sem modelo'} • ${v.tipo || 'sem tipo'}`;
+  }
+}
+
+function calcSLA(prev1, prev2, dataLiberacao){
+  const hoje = new Date();
+  hoje.setHours(0,0,0,0);
+
+  const ref = dataLiberacao ? new Date(dataLiberacao + 'T00:00:00') : hoje;
+
+  const p1 = prev1 ? new Date(prev1 + 'T00:00:00') : null;
+  const p2 = prev2 ? new Date(prev2 + 'T00:00:00') : null;
+  const prazo = p2 || p1;
+
+  if (!prazo) return '';
+
+  return ref <= prazo ? 'No prazo' : 'Em atraso';
+}
+
+function updateAutoSLA(){
+  const prev1 = document.getElementById('f-prev_liberacao')?.value || '';
+  const prev2 = document.getElementById('f-prev_liberacao2')?.value || '';
+  const dataLiberacao = document.getElementById('f-data_liberacao')?.value || '';
+  const sla = document.getElementById('f-sla');
+
+  if (!sla) return;
+
+  const valor = calcSLA(prev1, prev2, dataLiberacao);
+  sla.value = valor;
+}
+
+function bindOSAutoRules(){
+  const ident = document.getElementById('f-identificacao');
+  const prev1 = document.getElementById('f-prev_liberacao');
+  const prev2 = document.getElementById('f-prev_liberacao2');
+  const liber = document.getElementById('f-data_liberacao');
+  const placaFrota = document.getElementById('f-placa_frota');
+
+  if (ident && !ident.dataset.bound) {
+    ident.addEventListener('input', e => autoFill(e.target.value));
+    ident.dataset.bound = '1';
+  }
+
+  [prev1, prev2, liber].forEach(el => {
+    if (el && !el.dataset.bound) {
+      el.addEventListener('change', updateAutoSLA);
+      el.addEventListener('input', updateAutoSLA);
+      el.dataset.bound = '1';
+    }
+  });
+
+  if (placaFrota && !placaFrota.dataset.bound) {
+    placaFrota.addEventListener('input', () => {
+      placaFrota.dataset.manual = placaFrota.value ? '1' : '';
+    });
+    placaFrota.dataset.bound = '1';
+  }
+}
+
+function openAdd(){
+  S.eOS = null;
+  S.eCat = S.page;
+  document.getElementById('mos-title').textContent = 'Nova Ordem de Serviço';
+  clearOSF();
+  document.getElementById('f-data_abertura').value = new Date().toISOString().split('T')[0];
+  bindOSAutoRules();
+  updateAutoSLA();
+  document.getElementById('modal-os').classList.add('open');
+  setTimeout(() => document.getElementById('f-identificacao').focus(), 100);
+}
+
+function editOS(cat,id){
+  const m = S[cat].find(x => x.id === id);
+  if (!m) return;
+  S.eOS = id;
+  S.eCat = cat;
+  document.getElementById('mos-title').textContent = `Editar OS #${id} — ${m.frota || m.identificacao}`;
+  bindOSAutoRules();
+  fillOSF(m);
+  document.getElementById('modal-os').classList.add('open');
+}
 
 async function saveOS(){
-  const data={}; OSF.forEach(f=>{data[f]=document.getElementById('f-'+f)?.value||'';});
-  if(!data.identificacao){toast('Informe o Nº Frota ou Equipamento','error');return;}
-  if(!data.motivo){toast('Informe o motivo da parada','error');return;}
-  const c=S.eCat; if(!['frota','implementos','maquinas'].includes(c)){toast('Abra uma seção primeiro','error');return;}
-  if(data.data_abertura) data.dias_parado=Math.floor((new Date()-new Date(data.data_abertura))/86400000);
-  try{
-    if(S.eOS) await api(`/api/${c}/${S.eOS}`,'PUT',data);
+  const data = {};
+  OSF.forEach(f => { data[f] = document.getElementById('f-' + f)?.value || ''; });
+
+  if (!data.identificacao) {
+    toast('Informe o Nº Frota ou Equipamento','error');
+    return;
+  }
+
+  if (!data.motivo) {
+    toast('Informe o motivo da parada','error');
+    return;
+  }
+
+  const c = S.eCat;
+  if (!['frota','implementos','maquinas'].includes(c)) {
+    toast('Abra uma seção primeiro','error');
+    return;
+  }
+
+  const cadastro = findVeiculoByIdent(data.identificacao);
+
+  if (cadastro) {
+    data.placa_frota = data.placa_frota || cadastro.placa || cadastro.frota || '';
+    data.placa = cadastro.placa || '';
+    data.frota = cadastro.frota || data.identificacao || '';
+    data.tipo = cadastro.tipo || '';
+    data.modelo = cadastro.modelo || '';
+    data.marca = cadastro.marca || '';
+    data.ano = cadastro.ano || null;
+  } else {
+    data.frota = data.identificacao;
+  }
+
+  if (data.data_abertura) {
+    data.dias_parado = Math.floor(
+      (new Date() - new Date(data.data_abertura + 'T00:00:00')) / 86400000
+    );
+  }
+
+  data.sla = calcSLA(data.prev_liberacao, data.prev_liberacao2, data.data_liberacao);
+
+  try {
+    if (S.eOS) await api(`/api/${c}/${S.eOS}`,'PUT',data);
     else await api(`/api/${c}`,'POST',data);
-    toast(data.data_liberacao?'OS liberada e movida para o Histórico!':S.eOS?'OS atualizada!':'OS criada!','success');
-    closeMD('modal-os'); await loadAll();
-  }catch(e){toast('Erro ao salvar. Tente novamente.','error');}
+
+    toast(
+      data.data_liberacao
+        ? 'OS liberada e movida para o Histórico!'
+        : S.eOS
+          ? 'OS atualizada!'
+          : 'OS criada!',
+      'success'
+    );
+
+    closeMD('modal-os');
+    await loadAll();
+  } catch(e) {
+    toast('Erro ao salvar. Tente novamente.','error');
+  }
 }
 
 async function delOS(cat,id){
