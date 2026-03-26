@@ -1,0 +1,12 @@
+{
+  "name": "ziran-cloudflare-supabase",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler pages dev public --compatibility-date=2026-03-25",
+    "deploy": "wrangler pages deploy public"
+  },
+  "devDependencies": {
+    "wrangler": "^4.8.0"
+  }
+}
